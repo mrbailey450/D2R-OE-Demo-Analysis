@@ -1,0 +1,171 @@
+---
+title: "D2OE_Demo_v2"
+author: "Matt Bailey"
+date: "July 19, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## This is a brief demostration of analysis performed to examine the effects of Dopamine D2 receptor Overexpression on Goal-Directed Behavior in Mice
+
+This analysis explores behavioral differences between 2 different kinds of mice working for food rewards by making lever presses, and finds differences in how they make cost benefit choices based on different effort requirements
+
+# Importing data sets to be used in this analysis
+```{r}
+# Data Frame for Worktimes and Latencies in Different Press Requirements
+df_pse <- read.csv("https://raw.githubusercontent.com/mrbailey450/D2R-OE-Demo-Analysis/master/PSE_Group%20-%20DATA.csv", header = TRUE)
+
+# Data Frame for Proportion Hold Choices in Choice Experiment
+df <- read.csv("https://raw.githubusercontent.com/mrbailey450/D2R-OE-Demo-Analysis/master/D2OE_CEC-prop.csv",header = TRUE)
+
+# Data Frame for Point of Subjective Equalities from Choice Experiment
+df_temp <- read.csv("https://raw.githubusercontent.com/mrbailey450/D2R-OE-Demo-Analysis/master/D2OE_CEC_avg_Presstime_Lat.csv",header = TRUE)
+
+```
+
+# Loading packages to be used
+
+```{r, message = FALSE, warning = FALSE}
+# Using ggplot2 package for generating plots
+library(ggplot2)
+
+# Using dplyr for summarising means and grouping varibales in df's
+library(dplyr)
+```
+
+
+# Examining genotype differences in behavior when working for rewards
+
+Here, I am examining data from an experimnet simply increasing the number of lever presses mice must make to get a milk reward over days
+
+```{r}
+
+# Define a SEM function
+sem<-function(x){
+  sqrt(var(x, na.rm=T)/length(x))
+}
+
+# Quick look at the data frame
+head(df_temp)
+
+# Selecting only Chow fed subjects and sessions up to 40 presses
+df_temp_chow <- subset(df_temp, Dox == "Chow")
+df_temp_chow_40 <- subset(df_temp_chow, Only_40 == 1)
+
+# Determining the genotype averages for Worktimes and Latencies
+df_temp_chow_40_avg <- df_temp_chow_40 %>% 
+  group_by(Press_Ratio, Genotype) %>%
+  summarise(avg_Worktime = mean(na.omit(Press_Worktimes)), sem_Worktime = sem(Press_Worktimes),
+            avg_Latency = mean(na.omit(Press_Latency)), sem_Latency = sem(Press_Latency))
+
+# Plotting the worktimes as a function of the press requirment
+pd <- position_dodge(0.1)
+b <- ggplot(data = df_temp_chow_40_avg, aes(x = Press_Ratio, y = avg_Worktime, color = factor(Genotype)))
+b +  geom_errorbar(aes(ymin = avg_Worktime+sem_Worktime, ymax = avg_Worktime-sem_Worktime), size = 1, width=.1,position=pd)+ 
+geom_line(size = 2)+
+geom_point(size = 3)+
+  labs(x = "Press Requirement")+
+  labs(y = "Time to Complete Presses (s)")+
+  labs(title = "Press Requirement Effects on Work Times")
+
+# Repeated Measures ANOVA on Worktimes
+with(df_temp_chow_40, summary(aov(Press_Worktimes ~ factor(Press_Ratio) * Genotype)))
+
+
+# Plotting the latencies as a function of the press requirment
+pd <- position_dodge(0.1)
+b <- ggplot(data = df_temp_chow_40_avg, aes(x = Press_Ratio, y = avg_Latency, color = factor(Genotype)))
+b +  geom_errorbar(aes(ymin = avg_Latency+sem_Latency, ymax = avg_Latency-sem_Latency), size = 1, width=.1,position=pd)+ 
+geom_line(size = 2)+
+geom_point(size = 3)+
+  labs(x = "Press Requirement")+
+  labs(y = "Latency to Press (s)")+
+  labs(title = "Press Requirement Effects on Latencies")
+
+# Repeated Measures ANOVA on Worktimes
+with(df_temp_chow_40, summary(aov(Press_Latency ~ factor(Press_Ratio) * Genotype)))
+
+
+b1 <- ggplot(data = df_temp_chow_40, aes(x = Press_Latency,y = Press_Worktimes))
+b1 + geom_point() +
+  labs(x = "Latency to Press (s)")+
+  labs(y = "Time to Complete Presses (s)")+
+  labs(title = "Latency x Worktimes")
+
+# Examining the correlation between Worktimes and Latency
+with(df_temp_chow_40, cor.test(Press_Latency,Press_Worktimes)) 
+
+
+# Let's examine the two groups seperatley
+c <- ggplot(data = df_temp_chow_40, aes(x = Press_Latency,y = Press_Worktimes, color = Genotype))
+c + geom_point() +
+  labs(x = "Latency to Press (s)")+
+  labs(y = "Time to Complete Presses (s)")+
+  labs(title = "Latency x Worktimes for 2 Genotypes")
+
+
+# Examining the correlation between Worktimes and Latency for Each Genotype
+df_temp_chow_40_control <- subset(df_temp_chow_40, Genotype == "Control")
+df_temp_chow_40_d2oe <- subset(df_temp_chow_40, Genotype == "D2OE")
+```
+
+# Control Mice
+```{r}
+with(df_temp_chow_40_control, cor.test(Press_Latency,Press_Worktimes)) 
+```
+
+# D2R-OE Mice
+```{r}
+with(df_temp_chow_40_d2oe, cor.test(Press_Latency,Press_Worktimes)) 
+
+```
+
+## Summary: Discovered 2 differences with the D2R-OE mice 
+(1) Perform Work Differently - (Longer Latencies and Slower Worktimes)
+(2) Relationship between Latencies and Worktimes differs - (Strongder in D2R-OE mice)
+
+
+## Do these difference impact the way these mice make decisions about performing work?
+
+
+To examine this I performed an experiment which gave mice a CHOICE between holding a lever down for 10seconds (Constant Work), and Pressing the lever a given number of times
+
+```{r}
+
+head(df)
+
+# Getting only Chow fed mice
+df_chow <- subset(df, Food == "Chow")
+
+# Getting group averages forthe Chow fed mice
+df_chow_avg <- df_chow %>% 
+  group_by(Press_Req, Hold_Dur,Genotype) %>%
+  summarise(avg_prop = mean(Proportion))
+
+# Looking at the 10 second hold duration
+df_chow_10 <- subset(df_chow, Hold_Dur == 10) 
+
+# Getting group averages forthe Chow fed mice in the 10 second hold condition
+df_chow_10_avg <- df_chow_10 %>% 
+  group_by(Press_Req, Genotype) %>%
+  summarise(avg_prop = mean(Proportion), sem_prop = sem(Proportion))
+
+# Plotting Proportion Hold Choices in the Choice Experiment 
+pd <- position_dodge(0.1)
+a <- ggplot(data = df_chow_10_avg, aes(x = Press_Req, y = avg_prop, color = factor(Genotype)))
+a +  geom_errorbar(aes(ymin = avg_prop+sem_prop, ymax = avg_prop-sem_prop), size = 1, width=.1,position=pd)+ 
+geom_line(size = 1.5)+
+geom_point(size = 3)+
+  labs(x = "Press Requirement")+
+  labs(y = "Proportion Hold Choices")+
+  labs(title = "Effort Based Choice Behavior")
+
+# Repeated measures ANOVA on proportion of hold choices
+with(df_chow_10, summary(aov(Proportion ~ factor(Press_Req) * Genotype)))
+
+```
+
+
